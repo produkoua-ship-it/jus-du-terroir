@@ -1,0 +1,78 @@
+/* Minimal CSS for Jus du Terroir Elite */
+/* Most styling is handled by Tailwind in index.html */
+
+:root {
+    --terroir-primary: #C8265A;
+    --terroir-secondary: #240F2E;
+}
+
+body {
+    -webkit-tap-highlight-color: transparent;
+}
+
+.loading-state {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .5; }
+}
+
+/* Modal and Transitions */
+.modal-overlay {
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.animate-pop {
+    animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes pop {
+    0% { transform: scale(0.9); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.fade-out {
+    opacity: 0;
+    transition: opacity 0.25s ease-out;
+}
+
+.fade-in {
+    opacity: 1;
+    transition: opacity 0.25s ease-in;
+}
+
+/* PRINT STYLES */
+@media print {
+    nav, .no-print, button, #quick-action-overlay, .modal-overlay, #plus-icon {
+        display: none !important;
+    }
+    body {
+        background: white !important;
+        color: black !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .bg-white, .bg-gray-50 {
+        box-shadow: none !important;
+        border: 1px solid #eee !important;
+        background: white !important;
+    }
+    #view-container {
+        padding: 20px !important;
+        margin: 0 !important;
+        max-width: 100% !important;
+    }
+    h2, h3, h4, p, span {
+        color: black !important;
+    }
+    .animate-pop, .animate-fade-in {
+        animation: none !important;
+        transform: none !important;
+        opacity: 1 !important;
+    }
+    .chart-container {
+        max-height: 300px !important;
+    }
+}

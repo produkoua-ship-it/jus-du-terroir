@@ -1,0 +1,30 @@
+{
+  "name": "Jus du Terroir",
+  "short_name": "Terroir",
+  "description": "Système de Gestion Business Elite pour Jus du Terroir",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#240F2E",
+  "theme_color": "#C8265A",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "img/logo.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nouvelle Vente",
+      "url": "index.html?action=sale",
+      "icons": [{ "src": "img/logo.jpg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Inventaire",
+      "url": "index.html?action=inventory",
+      "icons": [{ "src": "img/logo.jpg", "sizes": "192x192" }]
+    }
+  ]
+}
