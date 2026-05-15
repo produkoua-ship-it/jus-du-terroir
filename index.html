@@ -6,13 +6,13 @@
     <title>Jus du Terroir | Elite Dashboard</title>
     
     <!-- PWA -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json?v=1.0.3">
     <meta name="theme-color" content="#C8265A">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Terroir">
-    <link rel="icon" type="image/jpeg" href="img/logo.jpg?v=1.0.2">
-    <link rel="apple-touch-icon" href="img/logo.jpg?v=1.0.2">
+    <link rel="icon" type="image/png" href="img/icon-192.png?v=1.0.3">
+    <link rel="apple-touch-icon" href="img/icon-192.png?v=1.0.3">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -63,14 +63,51 @@
         .fade-out { opacity: 0; transition: opacity 0.25s ease-out; }
         .fade-in { opacity: 1; transition: opacity 0.25s ease-in; }
 
+        /* DARK MODE SYSTEM */
         .dark-mode {
-            --terroir-bg: #121212;
-            --terroir-secondary: #ffffff;
-            color: #ffffff;
+            --terroir-bg: #0F0912;
+            --card-bg: #1A111F;
+            --text-main: #FFFFFF;
+            --text-muted: #A091A8;
+            --border-color: rgba(255, 255, 255, 0.08);
+            background-color: var(--terroir-bg) !important;
+            color: var(--text-main) !important;
         }
-        .dark-mode body { background-color: #121212; color: #f3f4f6; }
-        .dark-mode .bg-white { background-color: #1e1e1e; color: #ffffff; border-color: #333; }
-        .dark-mode .bg-gray-50 { background-color: #2a2a2a; color: #ffffff; border-color: #333; }
+        
+        .dark-mode body { background-color: var(--terroir-bg) !important; color: var(--text-main) !important; }
+        .dark-mode .bg-white { background-color: var(--card-bg) !important; color: var(--text-main) !important; }
+        .dark-mode .bg-gray-50 { background-color: rgba(255, 255, 255, 0.04) !important; color: var(--text-main) !important; }
+        
+        .dark-mode h1, .dark-mode h2, .dark-mode h3, .dark-mode h4, .dark-mode p, .dark-mode span, .dark-mode label { 
+            color: var(--text-main) !important; 
+        }
+        
+        .dark-mode .text-terroir-secondary, .dark-mode .text-gray-900, .dark-mode .text-gray-700 { 
+            color: var(--text-main) !important; 
+        }
+        
+        .dark-mode .text-gray-400, .dark-mode .text-gray-500, .dark-mode .text-white/50 { 
+            color: var(--text-muted) !important; 
+        }
+        
+        .dark-mode .border-gray-50, .dark-mode .border-gray-100, .dark-mode .border-white/10 { 
+            border-color: var(--border-color) !important; 
+        }
+
+        .dark-mode header, .dark-mode nav, .dark-mode aside { 
+            background-color: var(--card-bg) !important; 
+            border-color: var(--border-color) !important; 
+        }
+
+        .dark-mode input, .dark-mode select {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            color: white !important;
+            border: 1px solid var(--border-color) !important;
+        }
+
+        .dark-mode .shadow-sm, .dark-mode .shadow-md {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+        }
 
         #quick-action-overlay { opacity: 0; pointer-events: none; visibility: hidden; transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); }
         #quick-action-overlay.active { opacity: 1; pointer-events: auto; visibility: visible; }
@@ -198,8 +235,8 @@
     </div>
 
     <!-- MOBILE NAV -->
-    <div class="fixed bottom-8 left-6 right-6 z-50 lg:hidden no-print">
-        <nav class="bg-terroir-secondary rounded-3xl h-20 px-2 flex items-center justify-around shadow-2xl relative overflow-visible border border-white/5">
+    <div class="fixed bottom-0 left-0 right-0 z-50 lg:hidden no-print">
+        <nav class="bg-terroir-secondary h-20 px-4 flex items-center justify-around shadow-2xl relative overflow-visible border-t border-white/10 pb-safe">
             <button onclick="window.renderView('dashboard')" data-view="dashboard" class="nav-link flex flex-col items-center gap-1 text-gray-500 transition-all active-tab">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
                 <span class="text-[9px] uppercase font-black tracking-tighter">Accueil</span>

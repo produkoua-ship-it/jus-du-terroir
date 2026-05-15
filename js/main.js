@@ -128,6 +128,9 @@ window.initCharts = (viewName) => {
     if (window.myDashboardChart) window.myDashboardChart.destroy();
     if (window.myReportsChart) window.myReportsChart.destroy();
 
+    const isDark = document.documentElement.classList.contains('dark-mode');
+    const textColor = isDark ? '#A091A8' : '#666';
+
     if (viewName === 'dashboard') {
         const ctx = document.getElementById('dashboardChart');
         if (!ctx) return;
@@ -142,54 +145,93 @@ window.initCharts = (viewName) => {
                     tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#C8265A'
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { grid: { display: false } } } }
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { legend: { display: false } }, 
+                scales: { 
+                    y: { display: false }, 
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: textColor, font: { family: 'Outfit', weight: 'bold', size: 10 } }
+                    } 
+                } 
+            }
         });
     }
 
     if (viewName === 'reports') {
         const ctx = document.getElementById('reportsChart');
         if (!ctx) return;
-        const stats = State.getFilteredStats(window.currentReportFilter || 'month', window.selectedReportDate);
+        
+        const filter = window.currentReportFilter || 'month';
+        const start = window.reportStartDate || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
+        const end = window.reportEndDate || new Date().toISOString().split('T')[0];
+        
+        const stats = State.getFilteredStats(filter, start, end);
+        
         window.myReportsChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['Entrées', 'Sorties'],
+                labels: ['Revenus', 'Dépenses'],
                 datasets: [{
-                    data: [stats.revenue || 1, stats.expense || 0],
-                    backgroundColor: ['#6CA742', '#C8265A'], borderWidth: 0, cutout: '80%'
+                    data: [stats.revenue || 0, stats.expense || 0],
+                    backgroundColor: ['#6CA742', '#C8265A'], 
+                    borderWidth: 0, 
+                    cutout: '75%'
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { 
+                        display: true, 
+                        position: 'bottom',
+                        labels: { color: textColor, font: { family: 'Outfit', weight: 'bold' } }
+                    }
+                } 
+            }
         });
     }
 };
 
 // --- SETTINGS LOGIC ---
 
-window.saveSettings = async function() {
-    const btn = event.currentTarget;
+window.saveSettings = async function(e) {
+    const btn = e ? e.currentTarget : document.querySelector('button[onclick*="saveSettings"]');
+    if (!btn) return;
     const original = btn.innerHTML;
     btn.innerHTML = 'Enregistrement...';
     
     try {
         // Save Prices & Limits
         const prices = document.querySelectorAll('.price-input');
+        const updatePromises = [];
         for (let input of prices) {
             const id = input.getAttribute('data-id');
             const price = parseInt(input.value);
             const limitInput = document.querySelector(`[data-limit-id="${id}"]`);
             const limit = limitInput ? parseInt(limitInput.value) : 5;
-            await State.updatePrice(id, price, limit);
+            updatePromises.push(State.updateItemSettings(id, price, limit).catch(e => console.warn("Cloud price sync failed")));
         }
+        await Promise.all(updatePromises);
 
         // Save PIN & Biometrics
-        const pin = document.getElementById('set-pin').value;
-        await State.updateSettings('pin', pin);
+        const pinInput = document.getElementById('set-pin');
+        if (pinInput) {
+            const pin = pinInput.value;
+            // Always save to localStorage as backup
+            localStorage.setItem('terroir-pin', pin);
+            await State.updateSettings('pin', pin);
+        }
         
-        Utils.showToast("Réglages sauvegardés !");
+        Utils.showToast("Réglages sauvegardés localement et sur le cloud !");
         window.renderView('settings');
     } catch (e) {
-        Utils.showToast("Erreur lors de la sauvegarde", "error");
+        console.error("Save Error:", e);
+        Utils.showToast("Sauvegardé localement (Cloud indisponible)", "warning");
+        window.renderView('settings');
     } finally {
         btn.innerHTML = original;
     }
@@ -197,7 +239,41 @@ window.saveSettings = async function() {
 
 window.toggleBiometrics = async () => {
     const newValue = !State.settings.useBiometrics;
-    await State.updateSettings('useBiometrics', newValue);
+    
+    if (newValue) {
+        // Only trigger biometric prompt when ENABLING
+        try {
+            Utils.showToast("Veuillez confirmer votre identité...");
+            const challenge = new Uint8Array(32); window.crypto.getRandomValues(challenge);
+            await navigator.credentials.create({
+                publicKey: { 
+                    challenge, 
+                    rp: { name: "Jus du Terroir" }, 
+                    user: { id: new Uint8Array(16), name: "alida", displayName: "Alida Edwige" }, 
+                    pubKeyCredParams: [{ alg: -7, type: "public-key" }], 
+                    authenticatorSelection: { userVerification: "required" }, 
+                    timeout: 60000 
+                }
+            });
+            // Success
+            await State.updateSettings('useBiometrics', true);
+            Utils.showToast("Biométrie activée !");
+        } catch (e) {
+            console.warn("Biometric verification cancelled or failed", e);
+            Utils.showToast("Échec de la vérification", "error");
+            return; // Don't toggle if failed
+        }
+    } else {
+        // Disabling doesn't strictly need a prompt, but can be added if desired
+        await State.updateSettings('useBiometrics', false);
+        Utils.showToast("Biométrie désactivée");
+    }
+    
+    window.renderView('settings');
+};
+
+window.toggleTheme = async (mode) => {
+    await State.updateSettings('theme', mode);
     window.renderView('settings');
 };
 
@@ -318,7 +394,7 @@ function renderDashboard() {
                     <div class="space-y-3">
                         ${(State.recentSales || []).slice(0, 3).map(s => `
                             <div class="bg-white p-4 rounded-3xl flex items-center justify-between border border-gray-50 shadow-sm">
-                                <div class="flex items-center gap-4"><div class="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center">🛍️</div><div><p class="font-bold text-sm">${s.items || 'Vente'}</p><p class="text-[10px] text-gray-400">${new Date(s.date).toLocaleDateString()}</p></div></div>
+                                <div class="flex items-center gap-4"><div class="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center">🛍️</div><div><p class="font-bold text-sm">${s.items || 'Vente'}</p><p class="text-[10px] text-gray-400">${Utils.formatDateTime(s.date)}</p></div></div>
                                 <p class="font-black text-terroir-success">${Utils.formatCurrency(s.total || 0)}</p>
                             </div>`).join('') || '<p class="text-center text-gray-300 py-4 text-xs">Aucune vente récente</p>'}
                     </div>
@@ -328,9 +404,17 @@ function renderDashboard() {
                     <h3 class="font-black text-lg mb-4 flex items-center justify-between">Productions <button onclick="window.renderView('inventory')" class="text-terroir-primary text-[10px] font-black uppercase">Gérer</button></h3>
                     <div class="space-y-3">
                         ${(State.productions || []).slice(0, 3).map(p => `
-                            <div class="bg-white p-4 rounded-3xl flex items-center justify-between border border-gray-50 shadow-sm">
-                                <div class="flex items-center gap-4"><div class="w-10 h-10 bg-terroir-primary/5 text-terroir-primary rounded-xl flex items-center justify-center">🧪</div><div><p class="font-bold text-sm">${p.items || 'Production'}</p><p class="text-[10px] text-gray-400">${new Date(p.date).toLocaleDateString()}</p></div></div>
-                                <p class="font-black text-terroir-secondary">Mis en bouteille</p>
+                            <div class="bg-white p-4 rounded-3xl flex items-center justify-between border border-gray-50 shadow-sm gap-4">
+                                <div class="flex items-center gap-4 min-w-0">
+                                    <div class="w-10 h-10 bg-terroir-primary/5 text-terroir-primary rounded-xl flex items-center justify-center flex-shrink-0">🧪</div>
+                                    <div class="min-w-0">
+                                        <p class="font-bold text-xs truncate">${p.items || 'Production'}</p>
+                                        <p class="text-[10px] text-gray-400">${Utils.formatDateTime(p.date)}</p>
+                                    </div>
+                                </div>
+                                <div class="text-right flex-shrink-0">
+                                    <p class="text-[9px] font-black text-terroir-primary uppercase tracking-tighter bg-terroir-primary/5 px-2 py-1 rounded-lg">Prêt</p>
+                                </div>
                             </div>`).join('') || '<p class="text-center text-gray-300 py-4 text-xs">Aucune production</p>'}
 
                     </div>
@@ -408,7 +492,7 @@ function renderStockCard(i) {
 
 function renderSales() {
     const sorted = [...(State.recentSales || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
-    return `<div class="animate-pop">${renderBackButton()}<h2 class="text-2xl font-black mb-8">Historique</h2><div class="space-y-4">${sorted.map(s => `<div class="bg-white p-5 rounded-[2rem] border border-gray-50 shadow-sm flex items-center justify-between"><div class="flex items-center gap-4"><div class="w-12 h-12 bg-terroir-success/5 text-terroir-success rounded-2xl flex items-center justify-center">🛍️</div><div><h4 class="font-black text-sm">${s.items || 'Produit'}</h4><p class="text-[10px] text-gray-400">${new Date(s.date).toLocaleDateString()}</p></div></div><p class="font-black text-terroir-success">${Utils.formatCurrency(s.total)}</p></div>`).join('')}</div></div>`;
+    return `<div class="animate-pop">${renderBackButton()}<h2 class="text-2xl font-black mb-8">Historique</h2><div class="space-y-4">${sorted.map(s => `<div class="bg-white p-5 rounded-[2rem] border border-gray-50 shadow-sm flex items-center justify-between"><div class="flex items-center gap-4"><div class="w-12 h-12 bg-terroir-success/5 text-terroir-success rounded-2xl flex items-center justify-center">🛍️</div><div><h4 class="font-black text-sm">${s.items || 'Produit'}</h4><p class="text-[10px] text-gray-400">${Utils.formatDateTime(s.date)}</p></div></div><p class="font-black text-terroir-success">${Utils.formatCurrency(s.total)}</p></div>`).join('')}</div></div>`;
 }
 
 function renderExpenses() {
@@ -438,7 +522,7 @@ function renderExpenses() {
                             <div class="w-12 h-12 bg-terroir-accent/5 text-terroir-accent rounded-2xl flex items-center justify-center">💸</div>
                             <div>
                                 <h4 class="font-black text-sm">${e.item || 'Dépense'}</h4>
-                                <p class="text-[10px] text-gray-400">${new Date(e.date).toLocaleDateString()}</p>
+                                <p class="text-[10px] text-gray-400">${Utils.formatDateTime(e.date)}</p>
                             </div>
                         </div>
                         <p class="font-black text-terroir-primary">-${Utils.formatCurrency(e.amount)}</p>
@@ -455,12 +539,129 @@ function renderExpenses() {
 
 function renderReports() {
     const filter = window.currentReportFilter || 'month';
-    const stats = State.getFilteredStats(filter, window.selectedReportDate);
-    return `<div class="animate-pop">${renderBackButton()}<h2 class="text-2xl font-black mb-8">Bilan Financier</h2>
-        <div class="flex gap-3 mb-8"><select onchange="window.currentReportFilter=this.value; window.renderView('reports')" class="bg-white border border-gray-100 rounded-2xl p-4 text-[10px] font-black uppercase outline-none shadow-sm"><option value="today" ${filter==='today'?'selected':''}>Aujourd'hui</option><option value="week" ${filter==='week'?'selected':''}>Semaine</option><option value="month" ${filter==='month'?'selected':''}>Mois</option></select></div>
-        <div class="bg-terroir-secondary rounded-[2.5rem] p-10 mb-8 text-center text-white shadow-2xl relative overflow-hidden"><p class="text-[10px] font-black uppercase text-white/40 mb-2 tracking-widest">Bénéfice Net</p><h3 class="text-4xl font-black mb-6 text-terroir-success">${Utils.formatCurrency(stats.profit)}</h3><div class="grid grid-cols-2 gap-4 border-t border-white/10 pt-6"><div><p class="text-[9px] text-white/40">Entrées</p><p class="font-black text-terroir-success">+${Utils.formatCurrency(stats.revenue)}</p></div><div><p class="text-[9px] text-white/40">Sorties</p><p class="font-black text-terroir-primary">-${Utils.formatCurrency(stats.expense)}</p></div></div></div>
-        <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50 h-64"><canvas id="reportsChart"></canvas></div>
-    </div>`;
+    const startDateVal = window.reportStartDate || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
+    const endDateVal = window.reportEndDate || new Date().toISOString().split('T')[0];
+    
+    const stats = State.getFilteredStats(filter, startDateVal, endDateVal);
+    
+    // Breakdown calculations
+    const salesBreakdown = (stats.sales || []).reduce((acc, s) => {
+        acc[s.items] = (acc[s.items] || 0) + s.total;
+        return acc;
+    }, {});
+
+    return `
+        <div class="animate-pop">
+            <div class="flex justify-between items-start mb-8 no-print">
+                ${renderBackButton()}
+                <button onclick="window.print()" class="flex items-center gap-2 bg-terroir-secondary text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg active:scale-95 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                    Imprimer PDF
+                </button>
+            </div>
+            
+            <!-- PRINT HEADER -->
+            <div class="hidden print:block mb-10">
+                <div class="flex items-center justify-between border-b-2 border-terroir-primary pb-6">
+                    <div class="flex items-center gap-4">
+                        <img src="img/logo.jpg" class="w-20 h-20 rounded-2xl">
+                        <div>
+                            <h1 class="text-3xl font-black text-terroir-secondary">Jus du Terroir</h1>
+                            <p class="text-xs text-gray-500 uppercase tracking-widest font-bold">Rapport de Gestion Financière</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-black">${new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p class="text-[10px] text-gray-400 uppercase font-black tracking-tighter">Propriétaire : Alida Edwige</p>
+                    </div>
+                </div>
+                <p class="mt-4 text-[10px] font-bold text-gray-400">Période : Du ${new Date(startDateVal).toLocaleDateString()} au ${new Date(endDateVal).toLocaleDateString()}</p>
+            </div>
+
+            <h2 class="text-2xl font-black mb-8 print:hidden">Bilan Financier</h2>
+            
+            <div class="bg-white rounded-[2rem] p-6 mb-8 border border-gray-50 shadow-sm no-print">
+                <p class="text-[9px] font-black uppercase text-gray-400 mb-4 tracking-widest">Période d'analyse</p>
+                <div class="flex flex-wrap items-end gap-4">
+                    <div class="flex-1 min-w-[120px]">
+                        <p class="text-[8px] font-bold text-gray-400 uppercase mb-1">Date de début</p>
+                        <input type="date" value="${startDateVal}" id="report_start"
+                            class="w-full bg-gray-50 border-none rounded-xl p-3 text-[10px] font-black">
+                    </div>
+                    <div class="flex-1 min-w-[120px]">
+                        <p class="text-[8px] font-bold text-gray-400 uppercase mb-1">Date de fin</p>
+                        <input type="date" value="${endDateVal}" id="report_end"
+                            class="w-full bg-gray-50 border-none rounded-xl p-3 text-[10px] font-black">
+                    </div>
+                    <button onclick="window.reportStartDate=document.getElementById('report_start').value; window.reportEndDate=document.getElementById('report_end').value; window.currentReportFilter='custom'; window.renderView('reports')" 
+                        class="bg-terroir-primary text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase shadow-lg shadow-terroir-primary/20 active:scale-95 transition-all">
+                        Filtrer
+                    </button>
+                </div>
+                <div class="flex gap-2 mt-6 overflow-x-auto pb-2">
+                    <button onclick="window.currentReportFilter='today'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='today'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Aujourd'hui</button>
+                    <button onclick="window.currentReportFilter='week'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='week'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Cette Semaine</button>
+                    <button onclick="window.currentReportFilter='month'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='month'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Ce Mois</button>
+                    <button onclick="window.currentReportFilter='all'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='all'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Tout le temps</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 print:grid-cols-2 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-terroir-secondary rounded-[2.5rem] p-10 text-center text-white shadow-2xl relative overflow-hidden print:shadow-none print:border print:border-gray-100 print:p-6">
+                    <p class="text-[10px] font-black uppercase text-white/40 mb-2 tracking-widest print:text-gray-400">
+                        Bénéfice Net (${filter === 'today' ? "Aujourd'hui" : filter === 'week' ? "Cette Semaine" : filter === 'month' ? "Ce Mois" : filter === 'all' ? "Global" : "Période Choisie"})
+                    </p>
+                    <h3 class="text-4xl font-black mb-6 text-terroir-success print:text-green-600 print:text-2xl">${Utils.formatCurrency(stats.profit)}</h3>
+                    <div class="grid grid-cols-2 gap-4 border-t border-white/10 pt-6 print:border-gray-100 print:pt-4">
+                        <div>
+                            <p class="text-[9px] text-white/40 print:text-gray-400">Total Entrées</p>
+                            <p class="font-black text-terroir-success print:text-green-600 print:text-xs">+${Utils.formatCurrency(stats.revenue)}</p>
+                        </div>
+                        <div>
+                            <p class="text-[9px] text-white/40 print:text-gray-400">Total Sorties</p>
+                            <p class="font-black text-terroir-primary print:text-red-600 print:text-xs">-${Utils.formatCurrency(stats.expense)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50 h-64 print:h-48 print:p-4 print:shadow-none print:border-none flex items-center justify-center">
+                    <canvas id="reportsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 print:grid-cols-2 md:grid-cols-2 gap-8 mb-12 print:mb-6">
+                <!-- SALES BREAKDOWN -->
+                <div class="bg-white rounded-[2rem] p-6 border border-gray-50 print:border-gray-100 print:p-4 shadow-sm">
+                    <h3 class="font-black text-sm uppercase tracking-widest mb-6 border-b pb-4 print:mb-3 print:pb-2 print:text-[10px]">Détail des Ventes</h3>
+                    <div class="space-y-3 print:space-y-1">
+                        ${Object.entries(salesBreakdown).map(([name, total]) => `
+                            <div class="flex justify-between items-center text-xs print:text-[9px]">
+                                <span class="font-bold text-gray-500">${name}</span>
+                                <span class="font-black text-terroir-secondary">${Utils.formatCurrency(total)}</span>
+                            </div>
+                        `).join('') || '<p class="text-gray-300 text-xs text-center py-4">Aucune vente</p>'}
+                    </div>
+                </div>
+
+                <!-- EXPENSES BREAKDOWN -->
+                <div class="bg-white rounded-[2rem] p-6 border border-gray-50 print:border-gray-100 print:p-4 shadow-sm">
+                    <h3 class="font-black text-sm uppercase tracking-widest mb-6 border-b pb-4 text-terroir-primary print:mb-3 print:pb-2 print:text-[10px]">Achats Matières</h3>
+                    <div class="space-y-3 print:space-y-1">
+                        ${(stats.rawExpenses || []).map(e => `
+                            <div class="flex justify-between items-center text-xs print:text-[9px]">
+                                <span class="font-bold text-gray-500">${e.item}</span>
+                                <span class="font-black text-terroir-primary">-${Utils.formatCurrency(e.amount)}</span>
+                            </div>
+                        `).join('') || '<p class="text-gray-300 text-xs text-center py-4">Aucune dépense</p>'}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-12 hidden print:block text-center border-t border-gray-100 pt-8 print:mt-4 print:pt-4">
+                <p class="text-[10px] text-gray-400 font-bold uppercase italic print:text-[8px]">"L'excellence au service du goût traditionnel"</p>
+                <p class="text-[8px] text-gray-300 mt-2 print:text-[6px]">Document généré automatiquement le ${new Date().toLocaleString()}</p>
+            </div>
+        </div>`;
 }
 
 function renderSettings() {
@@ -471,7 +672,19 @@ function renderSettings() {
             
             <div class="bg-gradient-to-br from-terroir-primary to-pink-600 rounded-[2.5rem] p-8 text-white shadow-xl mb-8">
                 <h3 class="text-xl font-black mb-2">Création Originale Refontiq</h3>
-                <p class="text-xs text-white/80 font-medium leading-relaxed">Conçu exclusivement pour l'excellence de "Jus du Terroir" par Alida Edwige.</p>
+                <p class="text-xs text-white/80 font-medium leading-relaxed">Conçu exclusivement pour l'excellence de "Jus du Terroir" pour Alida Edwige.</p>
+            </div>
+
+            <!-- APPARENCE -->
+            <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50 mb-8">
+                <h3 class="font-black text-lg mb-6 flex items-center gap-3 text-terroir-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-terroir-primary"><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 19.07-1.41-1.41"/><path d="M12 20v2"/><path d="m6.34 17.66-1.41 1.41"/><path d="M2 12h2"/><path d="m7.76 7.76-1.41-1.41"/><circle cx="12" cy="12" r="4"/></svg>
+                    Apparence
+                </h3>
+                <div class="flex p-1 bg-gray-50 rounded-2xl">
+                    <button onclick="window.toggleTheme('light')" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${State.settings.theme === 'light' ? 'bg-white shadow-sm text-terroir-secondary' : 'text-gray-400'}">Claire</button>
+                    <button onclick="window.toggleTheme('dark')" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${State.settings.theme === 'dark' ? 'bg-terroir-secondary text-white shadow-sm' : 'text-gray-400'}">Sombre</button>
+                </div>
             </div>
 
             <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50 mb-8">
@@ -480,9 +693,12 @@ function renderSettings() {
                     Sécurité App
                 </h3>
                 <div class="space-y-4">
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                        <p class="font-bold text-sm">Code PIN</p>
-                        <input type="password" maxlength="4" placeholder="0000" id="set-pin" value="${State.settings.pin || ''}" class="w-20 bg-white border border-gray-100 rounded-xl p-2 text-center font-black tracking-widest outline-none">
+                    <div class="flex flex-col gap-3 p-4 bg-gray-50 rounded-2xl">
+                        <div class="flex items-center justify-between">
+                            <p class="font-bold text-sm">Code PIN</p>
+                            <input type="password" maxlength="4" placeholder="0000" id="set-pin" value="${State.settings.pin || ''}" class="w-20 bg-white border border-gray-100 rounded-xl p-2 text-center font-black tracking-widest outline-none">
+                        </div>
+                        <button onclick="window.saveSettings(event)" class="w-full bg-terroir-primary/10 text-terroir-primary text-[10px] font-black uppercase py-2 rounded-xl border border-terroir-primary/10">Modifier et Sauvegarder</button>
                     </div>
                     <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
                         <p class="font-bold text-sm">Empreinte / FaceID</p>
@@ -517,7 +733,7 @@ function renderSettings() {
                 </div>
             </div>
 
-            <button onclick="window.saveSettings()" class="w-full bg-terroir-secondary text-white font-black py-5 rounded-[1.5rem] shadow-xl active:scale-95 transition-all">Sauvegarder les réglages</button>
+            <button onclick="window.saveSettings(event)" class="w-full bg-terroir-secondary text-white font-black py-5 rounded-[1.5rem] shadow-xl active:scale-95 transition-all">Sauvegarder les réglages</button>
             <button onclick="window.exportToCSV()" class="w-full mt-4 bg-white border border-gray-100 text-terroir-secondary font-black py-5 rounded-[1.5rem] active:scale-95 transition-all">Exporter CSV</button>
         </div>`;
 }

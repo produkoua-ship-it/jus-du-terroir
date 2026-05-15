@@ -17,6 +17,12 @@ const Utils = {
         return new Date(dateString).toLocaleDateString('fr-FR', options);
     },
 
+    // Format Date and Time
+    formatDateTime: (dateString) => {
+        const d = new Date(dateString);
+        return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    },
+
     // Calculate stock status badge
     getStockStatus: (quantity, threshold = 20) => {
         if (quantity === 0) return '<span class="badge danger">Rupture</span>';

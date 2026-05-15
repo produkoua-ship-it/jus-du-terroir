@@ -9,9 +9,15 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "img/logo.jpg",
-      "sizes": "192x192 512x512",
-      "type": "image/jpeg",
+      "src": "img/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "img/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],
@@ -19,12 +25,12 @@
     {
       "name": "Nouvelle Vente",
       "url": "index.html?action=sale",
-      "icons": [{ "src": "img/logo.jpg", "sizes": "192x192" }]
+      "icons": [{ "src": "img/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Inventaire",
       "url": "index.html?action=inventory",
-      "icons": [{ "src": "img/logo.jpg", "sizes": "192x192" }]
+      "icons": [{ "src": "img/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

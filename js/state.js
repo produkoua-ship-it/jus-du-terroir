@@ -67,11 +67,19 @@ const State = {
                     if (setError) throw setError;
                     const settingsData = settingsArray && settingsArray.length > 0 ? settingsArray[0] : null;
                     if (settingsData) {
-                        this.settings = { ...this.settings, ...settingsData };
-                        if (this.settings.theme === 'dark') document.documentElement.className = 'dark-mode';
+                        this.settings.pin = settingsData.pin || this.settings.pin;
+                        this.settings.theme = settingsData.theme || this.settings.theme;
+                        this.settings.useBiometrics = settingsData.use_biometrics !== undefined ? settingsData.use_biometrics : this.settings.useBiometrics;
+                        this.applyTheme(this.settings.theme);
                     }
                 } catch (settingsErr) {
                     console.warn("Could not fetch app_settings, using defaults:", settingsErr);
+                }
+
+                // Fallback to LocalStorage for critical security
+                const localPin = localStorage.getItem('terroir-pin');
+                if (localPin && (!this.settings.pin)) {
+                    this.settings.pin = localPin;
                 }
             } else {
                 console.warn("Supabase not available. Running in offline/mock mode.");
@@ -113,6 +121,7 @@ const State = {
                 }
             }
         } catch(e) { console.error("Critical Sale Error", e); }
+        this.triggerUIRefresh();
     },
 
     addProduction: async function(flavorName, qtyPetit, qtyGrand, depense, prodDate) {
@@ -144,6 +153,7 @@ const State = {
                 }
             }
         } catch(e) { console.error("Critical Production Error", e); }
+        this.triggerUIRefresh();
     },
 
     addNewProduct: async function(flavorName, pricePetit, priceGrand, limit) {
@@ -178,6 +188,7 @@ const State = {
         try {
             if (supabaseClient) await supabaseClient.from('expenses').insert([expense]);
         } catch(e) { console.error("Error saving expense", e); }
+        this.triggerUIRefresh();
     },
 
     updateStock: async function(id, quantityChange) {
@@ -231,48 +242,48 @@ const State = {
         };
     },
 
-    getFilteredStats: function(timeframe = 'all', specificDate = null) {
+    getFilteredStats: function(timeframe = 'all', start = null, end = null) {
         const now = new Date();
-        now.setHours(23, 59, 59, 999);
-        let startDate = new Date(0); // Beginning of time
-        let endDate = now;
+        let startDate, endDate;
 
-        if (specificDate) {
-            startDate = new Date(specificDate);
-            startDate.setHours(0, 0, 0, 0);
-            endDate = new Date(specificDate);
-            endDate.setHours(23, 59, 59, 999);
+        if (timeframe === 'custom' && start && end) {
+            // Use local date strings to avoid timezone shifts
+            startDate = new Date(start + 'T00:00:00');
+            endDate = new Date(end + 'T23:59:59');
         } else if (timeframe === 'today') {
             startDate = new Date();
             startDate.setHours(0, 0, 0, 0);
-        } else if (timeframe === 'yesterday') {
-            startDate = new Date();
-            startDate.setDate(startDate.getDate() - 1);
-            startDate.setHours(0, 0, 0, 0);
             endDate = new Date();
-            endDate.setDate(endDate.getDate() - 1);
             endDate.setHours(23, 59, 59, 999);
         } else if (timeframe === 'week') {
             startDate = new Date();
             const day = startDate.getDay() || 7;
-            if (day !== 1) startDate.setHours(-24 * (day - 1));
+            startDate.setDate(startDate.getDate() - (day - 1));
             startDate.setHours(0, 0, 0, 0);
+            endDate = new Date();
+            endDate.setHours(23, 59, 59, 999);
         } else if (timeframe === 'month') {
             startDate = new Date(now.getFullYear(), now.getMonth(), 1);
             startDate.setHours(0, 0, 0, 0);
+            endDate = new Date();
+            endDate.setHours(23, 59, 59, 999);
+        } else {
+            startDate = new Date(0);
+            endDate = new Date();
+            endDate.setHours(23, 59, 59, 999);
         }
 
-        const filteredSales = this.recentSales.filter(sale => {
+        const filteredSales = (this.recentSales || []).filter(sale => {
             const d = new Date(sale.date);
             return d >= startDate && d <= endDate;
         });
 
-        const filteredProds = this.productions.filter(prod => {
+        const filteredProds = (this.productions || []).filter(prod => {
             const d = new Date(prod.date);
             return d >= startDate && d <= endDate;
         });
 
-        const filteredExpenses = this.expenses.filter(exp => {
+        const filteredExpenses = (this.expenses || []).filter(exp => {
             const d = new Date(exp.date);
             return d >= startDate && d <= endDate;
         });
@@ -310,14 +321,16 @@ const State = {
     settings: {
         theme: localStorage.getItem('terroir-theme') || 'light',
         notifications: true,
-        businessName: 'Jus du Terroir'
+        businessName: 'Jus du Terroir',
+        pin: null,
+        useBiometrics: false
     },
 
     updateSettings: async function(key, value) {
         this.settings[key] = value;
         if (key === 'theme') {
             localStorage.setItem('terroir-theme', value);
-            document.documentElement.className = value === 'dark' ? 'dark-mode' : '';
+            this.applyTheme(value);
         }
         
         // Sync to Cloud
@@ -326,12 +339,30 @@ const State = {
                 const payload = { 
                     id: 'global_settings', 
                     pin: this.settings.pin,
-                    useBiometrics: this.settings.useBiometrics,
-                    theme: this.settings.theme
+                    use_biometrics: this.settings.useBiometrics, // Match DB column name
+                    theme: this.settings.theme,
+                    updated_at: new Date().toISOString()
                 };
                 await supabaseClient.from('app_settings').upsert([payload]);
             }
         } catch(e) { console.error("Error syncing settings", e); }
+    },
+
+    applyTheme: function(theme) {
+        if (theme === 'dark') {
+            document.documentElement.classList.add('dark-mode');
+            document.body.classList.add('dark-mode');
+        } else {
+            document.documentElement.classList.remove('dark-mode');
+            document.body.classList.remove('dark-mode');
+        }
+    },
+
+    triggerUIRefresh: function() {
+        if (window.renderView) {
+            const activeView = document.querySelector('.nav-link.active-tab')?.getAttribute('data-view') || 'dashboard';
+            window.renderView(activeView);
+        }
     }
 };
 

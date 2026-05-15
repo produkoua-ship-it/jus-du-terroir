@@ -1,4 +1,4 @@
-const CACHE_NAME = 'terroir-v2';
+const CACHE_NAME = 'terroir-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -8,7 +8,8 @@ const ASSETS = [
   './js/utils.js',
   './js/ai-assistant.js',
   './manifest.json',
-  './img/logo.jpg'
+  './img/icon-192.png',
+  './img/icon-512.png'
 ];
 
 // Install Event
