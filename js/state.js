@@ -1,4 +1,4 @@
-// State management and Supabase Cloud Database Integration
+// State management and Supabase Cloud Database Integration (Local-First Offline Architected)
 
 const supabaseUrl = 'https://saybrhjnzivcblmkcdgj.supabase.co';
 const supabaseKey = 'sb_publishable_WfaiELUt2LRkodCmBKhnjA_-DFF4mHE';
@@ -24,77 +24,357 @@ const State = {
     recentSales: [],
     productions: [],
     expenses: [],
+    isOnline: navigator.onLine,
+    isSyncing: false,
+
+    settings: {
+        theme: localStorage.getItem('terroir-theme') || 'light',
+        notifications: true,
+        businessName: 'Jus du Terroir',
+        pin: localStorage.getItem('terroir-pin') || null,
+        useBiometrics: false
+    },
+
+    // Helper functions for Local Storage
+    saveLocal: function(key, data) {
+        localStorage.setItem('terroir-' + key, JSON.stringify(data));
+    },
+
+    loadLocal: function(key, defaultValue = []) {
+        const data = localStorage.getItem('terroir-' + key);
+        try {
+            return data ? JSON.parse(data) : defaultValue;
+        } catch (e) {
+            console.error("Error parsing local terroir-" + key, e);
+            return defaultValue;
+        }
+    },
+
+    getPendingActions: function() {
+        return this.loadLocal('pending-actions', []);
+    },
+
+    savePendingActions: function(actions) {
+        this.saveLocal('pending-actions', actions);
+    },
+
+    queueAction: function(type, data) {
+        const actions = this.getPendingActions();
+        const action = {
+            id: 'A-' + Math.floor(Math.random() * 10000000),
+            type,
+            data,
+            timestamp: new Date().toISOString()
+        };
+        actions.push(action);
+        this.savePendingActions(actions);
+        this.updateSyncStatusIndicator(this.isOnline);
+        
+        if (this.isOnline) {
+            this.processPendingActions().catch(err => console.error("Error processing pending action:", err));
+        }
+    },
 
     init: async function() {
         try {
-            if (supabaseClient) {
-                console.log("Supabase Client initialized. Fetching inventory...");
-                
-                // Fetch Inventory
-                const { data: invData, error: invError } = await supabaseClient.from('inventory').select('*');
-                
-                if (invError) {
-                    console.error("Supabase Inventory Error:", invError);
-                    Utils.showToast("Erreur d'inventaire cloud", "error");
-                }
-
-                if (invData && invData.length > 0) {
-                    this.inventory = invData;
-                } else {
-                    console.warn("Inventory is empty or not found. Using defaults.");
-                    this.inventory = defaultInventory; 
-                }
-
-                // Fetch Sales
-                const { data: salesData, error: salesError } = await supabaseClient.from('sales').select('*').order('date', { ascending: false }).limit(100);
-                if (salesError) {
-                    console.error("Supabase Sales Error:", salesError);
-                    Utils.showToast("Impossible de charger les ventes récentes", "error");
-                }
-                if (salesData) this.recentSales = salesData;
-
-                // Fetch Productions
-                const { data: prodData } = await supabaseClient.from('productions').select('*').order('date', { ascending: false }).limit(100);
-                if (prodData) this.productions = prodData;
-
-                // Fetch Expenses
-                const { data: expData } = await supabaseClient.from('expenses').select('*').order('date', { ascending: false }).limit(100);
-                if (expData) this.expenses = expData;
-
-                // Fetch App Settings
-                try {
-                    const { data: settingsArray, error: setError } = await supabaseClient.from('app_settings').select('*').limit(1);
-                    if (setError) throw setError;
-                    const settingsData = settingsArray && settingsArray.length > 0 ? settingsArray[0] : null;
-                    if (settingsData) {
-                        this.settings.pin = settingsData.pin || this.settings.pin;
-                        this.settings.theme = settingsData.theme || this.settings.theme;
-                        this.settings.useBiometrics = settingsData.use_biometrics !== undefined ? settingsData.use_biometrics : this.settings.useBiometrics;
-                        this.applyTheme(this.settings.theme);
-                    }
-                } catch (settingsErr) {
-                    console.warn("Could not fetch app_settings, using defaults:", settingsErr);
-                }
-
-                // Fallback to LocalStorage for critical security
-                const localPin = localStorage.getItem('terroir-pin');
-                if (localPin && (!this.settings.pin)) {
-                    this.settings.pin = localPin;
-                }
-            } else {
-                console.warn("Supabase not available. Running in offline/mock mode.");
+            console.log("Initializing local-first state...");
+            
+            // 1. Load from localStorage immediately for Instant Startup
+            this.inventory = this.loadLocal('inventory', []);
+            if (this.inventory.length === 0) {
+                console.warn("Local inventory empty. Using default inventory.");
                 this.inventory = defaultInventory;
+                this.saveLocal('inventory', this.inventory);
+            }
+            
+            this.recentSales = this.loadLocal('sales', []);
+            this.productions = this.loadLocal('productions', []);
+            this.expenses = this.loadLocal('expenses', []);
+            
+            // Load and apply settings
+            const localSettings = this.loadLocal('settings', null);
+            if (localSettings) {
+                this.settings = { ...this.settings, ...localSettings };
+            }
+            
+            // Keep theme & PIN backward compatible with existing settings
+            const legacyTheme = localStorage.getItem('terroir-theme');
+            if (legacyTheme) this.settings.theme = legacyTheme;
+            const legacyPin = localStorage.getItem('terroir-pin');
+            if (legacyPin) this.settings.pin = legacyPin;
+
+            this.applyTheme(this.settings.theme);
+
+            // 2. Render UI immediately (loaded from local cache in <1ms)
+            this.triggerUIRefresh();
+
+            // 3. Listen to network connectivity
+            this.isOnline = navigator.onLine;
+            this.updateSyncStatusIndicator(this.isOnline);
+
+            window.addEventListener('online', () => this.setOnlineStatus(true));
+            window.addEventListener('offline', () => this.setOnlineStatus(false));
+
+            // 4. Background Sync with Cloud (non-blocking)
+            if (supabaseClient) {
+                this.syncWithCloud().catch(err => console.error("Initial background sync failed:", err));
+            } else {
+                console.warn("Supabase client is not available. Operating in Offline Mode.");
             }
         } catch (e) {
-            console.error("Critical Supabase Init Error:", e);
-            Utils.showToast("Erreur de synchronisation initiale", "error");
+            console.error("Critical State Initialization Error:", e);
+            Utils.showToast("Erreur d'initialisation locale", "error");
             this.inventory = defaultInventory;
         }
+    },
 
-        // Trigger UI Re-render
-        if (window.renderView) {
-            const activeView = document.querySelector('.nav-link.active-tab')?.getAttribute('data-view') || 'dashboard';
-            window.renderView(activeView);
+    setOnlineStatus: function(isOnline) {
+        this.isOnline = isOnline;
+        console.log(`Network Status updated to: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
+        
+        this.updateSyncStatusIndicator(isOnline);
+        
+        if (isOnline) {
+            Utils.showToast("Connexion internet détectée", "success");
+            // Delay sync slightly to allow connection stabilization
+            setTimeout(() => {
+                this.syncWithCloud().catch(err => console.error("Cloud sync failed:", err));
+                this.processPendingActions().catch(err => console.error("Pending actions processing failed:", err));
+            }, 1000);
+        } else {
+            Utils.showToast("Mode hors connexion activé", "info");
+        }
+    },
+
+    updateSyncStatusIndicator: function(isOnline, state = '') {
+        const badges = document.querySelectorAll('.network-badge');
+        if (badges.length === 0) return;
+
+        const pendingCount = this.getPendingActions().length;
+        let badgeHTML = '';
+
+        if (!isOnline) {
+            badgeHTML = `
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                <span>Hors ligne ${pendingCount > 0 ? `(${pendingCount} en attente)` : ''}</span>
+            `;
+            badges.forEach(b => {
+                b.className = "network-badge flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-500 border border-amber-500/20 no-print";
+                b.innerHTML = badgeHTML;
+            });
+        } else if (state === 'syncing') {
+            badgeHTML = `
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                <span>Synchro...</span>
+            `;
+            badges.forEach(b => {
+                b.className = "network-badge flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-500 border border-blue-500/20 no-print";
+                b.innerHTML = badgeHTML;
+            });
+        } else if (pendingCount > 0) {
+            badgeHTML = `
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                <span>Synchro en attente (${pendingCount})</span>
+            `;
+            badges.forEach(b => {
+                b.className = "network-badge flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 no-print";
+                b.innerHTML = badgeHTML;
+            });
+        } else {
+            badgeHTML = `
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>En ligne</span>
+            `;
+            badges.forEach(b => {
+                b.className = "network-badge flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 no-print";
+                b.innerHTML = badgeHTML;
+            });
+        }
+    },
+
+    processPendingActions: async function() {
+        if (this.isSyncing) return;
+        if (!supabaseClient || !this.isOnline) return;
+
+        const actions = this.getPendingActions();
+        if (actions.length === 0) return;
+
+        this.isSyncing = true;
+        this.updateSyncStatusIndicator(true, 'syncing');
+        console.log(`Syncing ${actions.length} offline actions to Supabase...`);
+
+        let successCount = 0;
+        for (let i = 0; i < actions.length; i++) {
+            const action = actions[i];
+            let success = false;
+            try {
+                switch (action.type) {
+                    case 'addSale':
+                        const { error: saleErr } = await supabaseClient.from('sales').insert([action.data]);
+                        if (!saleErr) success = true;
+                        else console.error("Error inserting sale:", saleErr);
+                        break;
+                    case 'addProduction':
+                        const { error: prodErr } = await supabaseClient.from('productions').insert([action.data]);
+                        if (!prodErr) success = true;
+                        else console.error("Error inserting production:", prodErr);
+                        break;
+                    case 'addNewProduct':
+                        const { error: newProdErr } = await supabaseClient.from('inventory').insert(action.data);
+                        if (!newProdErr) success = true;
+                        else console.error("Error inserting product:", newProdErr);
+                        break;
+                    case 'addGeneralExpense':
+                        const { error: expErr } = await supabaseClient.from('expenses').insert([action.data]);
+                        if (!expErr) success = true;
+                        else console.error("Error inserting expense:", expErr);
+                        break;
+                    case 'updateStock':
+                    case 'updatePrice':
+                        const { error: stockErr } = await supabaseClient.from('inventory').upsert([action.data]);
+                        if (!stockErr) success = true;
+                        else console.error("Error updating inventory:", stockErr);
+                        break;
+                    case 'updateSettings':
+                        const { error: setErr } = await supabaseClient.from('app_settings').upsert([action.data]);
+                        if (!setErr) success = true;
+                        else console.error("Error updating settings:", setErr);
+                        break;
+                }
+            } catch (err) {
+                console.error(`Error in queue execution for action ${action.type}:`, err);
+            }
+
+            if (success) {
+                successCount++;
+            } else {
+                console.warn(`Sync queue blocked at action ${action.type}. Retrying later.`);
+                break;
+            }
+        }
+
+        if (successCount > 0) {
+            const remaining = this.getPendingActions().slice(successCount);
+            this.savePendingActions(remaining);
+            console.log(`Successfully processed ${successCount} queued actions. ${remaining.length} remaining.`);
+        }
+
+        this.isSyncing = false;
+        this.updateSyncStatusIndicator(this.isOnline);
+    },
+
+    syncWithCloud: async function() {
+        if (!supabaseClient || !this.isOnline) return;
+        
+        console.log("Synchronizing data with Supabase Cloud...");
+        this.updateSyncStatusIndicator(true, 'syncing');
+
+        try {
+            // 1. Process pending queue first to ensure cloud receives latest local edits
+            await this.processPendingActions();
+
+            // 2. Sync Inventory (Merge based on last_updated)
+            const { data: cloudInv, error: invErr } = await supabaseClient.from('inventory').select('*');
+            if (invErr) throw invErr;
+
+            if (cloudInv && cloudInv.length > 0) {
+                const mergedInventory = [...this.inventory];
+                
+                cloudInv.forEach(cloudItem => {
+                    const localIndex = mergedInventory.findIndex(li => li.id === cloudItem.id);
+                    if (localIndex === -1) {
+                        mergedInventory.push(cloudItem);
+                    } else {
+                        const localItem = mergedInventory[localIndex];
+                        const localTime = new Date(localItem.last_updated || 0).getTime();
+                        const cloudTime = new Date(cloudItem.last_updated || 0).getTime();
+                        
+                        if (cloudTime > localTime) {
+                            mergedInventory[localIndex] = cloudItem;
+                        } else if (localTime > cloudTime) {
+                            // Local item is newer, queue update for cloud
+                            this.queueAction('updateStock', localItem);
+                        }
+                    }
+                });
+                
+                this.inventory = mergedInventory;
+                this.saveLocal('inventory', this.inventory);
+            }
+
+            // 3. Sync Sales (Merge and prevent duplicates)
+            const { data: cloudSales, error: salesErr } = await supabaseClient.from('sales').select('*').order('date', { ascending: false }).limit(100);
+            if (salesErr) throw salesErr;
+
+            if (cloudSales) {
+                const salesMap = {};
+                cloudSales.forEach(s => salesMap[s.id] = s);
+                this.recentSales.forEach(s => salesMap[s.id] = s);
+                
+                this.recentSales = Object.values(salesMap)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .slice(0, 100);
+                    
+                this.saveLocal('sales', this.recentSales);
+            }
+
+            // 4. Sync Productions
+            const { data: cloudProds, error: prodsErr } = await supabaseClient.from('productions').select('*').order('date', { ascending: false }).limit(100);
+            if (prodsErr) throw prodsErr;
+
+            if (cloudProds) {
+                const prodsMap = {};
+                cloudProds.forEach(p => prodsMap[p.id] = p);
+                this.productions.forEach(p => prodsMap[p.id] = p);
+                
+                this.productions = Object.values(prodsMap)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .slice(0, 100);
+                    
+                this.saveLocal('productions', this.productions);
+            }
+
+            // 5. Sync Expenses
+            const { data: cloudExps, error: expsErr } = await supabaseClient.from('expenses').select('*').order('date', { ascending: false }).limit(100);
+            if (expsErr) throw expsErr;
+
+            if (cloudExps) {
+                const expsMap = {};
+                cloudExps.forEach(e => expsMap[e.id] = e);
+                this.expenses.forEach(e => expsMap[e.id] = e);
+                
+                this.expenses = Object.values(expsMap)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .slice(0, 100);
+                    
+                this.saveLocal('expenses', this.expenses);
+            }
+
+            // 6. Sync App Settings
+            const { data: settingsArray, error: settingsErr } = await supabaseClient.from('app_settings').select('*').limit(1);
+            if (!settingsErr && settingsArray && settingsArray.length > 0) {
+                const cloudSettings = settingsArray[0];
+                this.settings.pin = cloudSettings.pin || this.settings.pin;
+                this.settings.theme = cloudSettings.theme || this.settings.theme;
+                this.settings.useBiometrics = cloudSettings.use_biometrics !== undefined ? cloudSettings.use_biometrics : this.settings.useBiometrics;
+                
+                this.saveLocal('settings', this.settings);
+                localStorage.setItem('terroir-theme', this.settings.theme);
+                if (this.settings.pin) localStorage.setItem('terroir-pin', this.settings.pin);
+                this.applyTheme(this.settings.theme);
+            }
+
+            console.log("Cloud synchronisation complete.");
+            this.updateSyncStatusIndicator(true);
+            this.triggerUIRefresh();
+
+            // Run queue again if new updateStock actions were added during merge
+            if (this.getPendingActions().length > 0) {
+                this.processPendingActions().catch(err => console.error("Post-sync process queue failure:", err));
+            }
+        } catch (e) {
+            console.error("Cloud synchronization failed (app will continue working offline):", e);
+            this.updateSyncStatusIndicator(false);
         }
     },
 
@@ -107,21 +387,16 @@ const State = {
             status: 'Completed'
         };
         
-        // Optimistic UI update
+        // 1. Optimistic local update (instant response)
         this.recentSales.unshift(sale); 
         if (this.recentSales.length > 100) this.recentSales.pop(); 
         
-        // Save to Supabase Cloud
-        try {
-            if (supabaseClient) {
-                const { error } = await supabaseClient.from('sales').insert([sale]);
-                if (error) {
-                    console.error("Supabase Sale Error:", error);
-                    Utils.showToast("Échec de l'enregistrement de la vente", "error");
-                }
-            }
-        } catch(e) { console.error("Critical Sale Error", e); }
+        this.saveLocal('sales', this.recentSales);
         this.triggerUIRefresh();
+        Utils.showToast("Vente enregistrée", "success");
+        
+        // 2. Queue action for cloud
+        this.queueAction('addSale', sale);
     },
 
     addProduction: async function(flavorName, qtyPetit, qtyGrand, depense, prodDate) {
@@ -132,28 +407,23 @@ const State = {
             cost: depense || 0
         };
         
-        // Optimistic UI update
+        // 1. Local update
         this.productions.unshift(prod);
         if (this.productions.length > 100) this.productions.pop();
+        this.saveLocal('productions', this.productions);
         
-        // Update Inventory Stock
+        // Update Inventory Stock (Local)
         const petitItem = this.inventory.find(i => i.name.includes(flavorName) && i.name.toLowerCase().includes('petit'));
         const grandItem = this.inventory.find(i => i.name.includes(flavorName) && i.name.toLowerCase().includes('grand'));
         
         if (petitItem && qtyPetit > 0) await this.updateStock(petitItem.id, qtyPetit);
         if (grandItem && qtyGrand > 0) await this.updateStock(grandItem.id, qtyGrand);
         
-        // Save to Supabase Cloud
-        try {
-            if (supabaseClient) {
-                const { error } = await supabaseClient.from('productions').insert([prod]);
-                if (error) {
-                    console.error("Supabase Production Error:", error);
-                    Utils.showToast("Échec de l'enregistrement de la production", "error");
-                }
-            }
-        } catch(e) { console.error("Critical Production Error", e); }
         this.triggerUIRefresh();
+        Utils.showToast("Production enregistrée", "success");
+        
+        // 2. Queue action for cloud
+        this.queueAction('addProduction', prod);
     },
 
     addNewProduct: async function(flavorName, pricePetit, priceGrand, limit) {
@@ -163,11 +433,14 @@ const State = {
             { id: idBase + '_G', name: `${flavorName} (Grand)`, category: 'Jus', size: 'Grand', price: priceGrand, stock: 0, critical_limit: limit, last_updated: new Date().toISOString() }
         ];
 
+        // 1. Local update
         this.inventory.push(...newItems);
+        this.saveLocal('inventory', this.inventory);
+        this.triggerUIRefresh();
+        Utils.showToast("Nouveau produit créé", "success");
 
-        if (supabaseClient) {
-            await supabaseClient.from('inventory').insert(newItems);
-        }
+        // 2. Queue action for cloud
+        this.queueAction('addNewProduct', newItems);
         return true;
     },
 
@@ -180,15 +453,15 @@ const State = {
             category: 'Matière Première'
         };
         
-        // Optimistic UI update
+        // 1. Local update
         this.expenses.unshift(expense);
         if (this.expenses.length > 100) this.expenses.pop();
-        
-        // Save to Supabase Cloud
-        try {
-            if (supabaseClient) await supabaseClient.from('expenses').insert([expense]);
-        } catch(e) { console.error("Error saving expense", e); }
+        this.saveLocal('expenses', this.expenses);
         this.triggerUIRefresh();
+        Utils.showToast("Achat enregistré", "success");
+        
+        // 2. Queue action for cloud
+        this.queueAction('addGeneralExpense', expense);
     },
 
     updateStock: async function(id, quantityChange) {
@@ -198,16 +471,11 @@ const State = {
             if(item.stock < 0) item.stock = 0;
             item.last_updated = new Date().toISOString();
             
-            // Upsert to Supabase Cloud
-            try {
-                if (supabaseClient) {
-                    const { error } = await supabaseClient.from('inventory').upsert([item]);
-                    if (error) {
-                        console.error("Supabase Stock Update Error:", error);
-                        Utils.showToast("Erreur lors de la mise à jour des stocks", "error");
-                    }
-                }
-            } catch(e) { console.error("Critical Stock Error", e); }
+            // Local update
+            this.saveLocal('inventory', this.inventory);
+            
+            // Queue action for cloud
+            this.queueAction('updateStock', item);
         }
     },
 
@@ -247,7 +515,6 @@ const State = {
         let startDate, endDate;
 
         if (timeframe === 'custom' && start && end) {
-            // Use local date strings to avoid timezone shifts
             startDate = new Date(start + 'T00:00:00');
             endDate = new Date(end + 'T23:59:59');
         } else if (timeframe === 'today') {
@@ -312,40 +579,37 @@ const State = {
             if (newPrice !== undefined) item.price = newPrice;
             if (newLimit !== undefined) item.critical_limit = newLimit;
             item.last_updated = new Date().toISOString();
-            try {
-                if (supabaseClient) await supabaseClient.from('inventory').upsert([item]);
-            } catch(e) { console.error("Error updating item settings", e); }
-        }
-    },
+            
+            // Local update
+            this.saveLocal('inventory', this.inventory);
+            this.triggerUIRefresh();
+            Utils.showToast("Paramètres produit mis à jour", "success");
 
-    settings: {
-        theme: localStorage.getItem('terroir-theme') || 'light',
-        notifications: true,
-        businessName: 'Jus du Terroir',
-        pin: null,
-        useBiometrics: false
+            // Queue action
+            this.queueAction('updatePrice', item);
+        }
     },
 
     updateSettings: async function(key, value) {
         this.settings[key] = value;
+        this.saveLocal('settings', this.settings);
+        
         if (key === 'theme') {
             localStorage.setItem('terroir-theme', value);
             this.applyTheme(value);
+        } else if (key === 'pin') {
+            localStorage.setItem('terroir-pin', value);
         }
         
-        // Sync to Cloud
-        try {
-            if (supabaseClient) {
-                const payload = { 
-                    id: 'global_settings', 
-                    pin: this.settings.pin,
-                    use_biometrics: this.settings.useBiometrics, // Match DB column name
-                    theme: this.settings.theme,
-                    updated_at: new Date().toISOString()
-                };
-                await supabaseClient.from('app_settings').upsert([payload]);
-            }
-        } catch(e) { console.error("Error syncing settings", e); }
+        // Queue settings write
+        const payload = { 
+            id: 'global_settings', 
+            pin: this.settings.pin,
+            use_biometrics: this.settings.useBiometrics,
+            theme: this.settings.theme,
+            updated_at: new Date().toISOString()
+        };
+        this.queueAction('updateSettings', payload);
     },
 
     applyTheme: function(theme) {
@@ -366,5 +630,6 @@ const State = {
     }
 };
 
-// Initialize DB on load
+// Initialize State Engine
 window.State = State;
+State.init();

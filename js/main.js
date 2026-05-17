@@ -213,7 +213,7 @@ window.saveSettings = async function(e) {
             const price = parseInt(input.value);
             const limitInput = document.querySelector(`[data-limit-id="${id}"]`);
             const limit = limitInput ? parseInt(limitInput.value) : 5;
-            updatePromises.push(State.updateItemSettings(id, price, limit).catch(e => console.warn("Cloud price sync failed")));
+            updatePromises.push(State.updatePrice(id, price, limit).catch(e => console.warn("Cloud price sync failed")));
         }
         await Promise.all(updatePromises);
 
