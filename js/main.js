@@ -2,16 +2,16 @@
 
 // --- GLOBAL FUNCTIONS ---
 
-window.renderView = async function(viewName) {
+window.renderView = async function (viewName) {
     const container = document.getElementById('view-container');
     if (!container) return;
 
     container.classList.add('fade-out');
-    
+
     setTimeout(() => {
         let htmlContent = '';
         try {
-            switch(viewName) {
+            switch (viewName) {
                 case 'dashboard': htmlContent = renderDashboard(); break;
                 case 'inventory': htmlContent = renderInventory(); break;
                 case 'sales': htmlContent = renderSales(); break;
@@ -24,11 +24,11 @@ window.renderView = async function(viewName) {
             console.error("Render Error:", err);
             htmlContent = `<div class="py-20 text-center text-terroir-primary font-bold">Erreur d'affichage : ${err.message}</div>`;
         }
-        
+
         container.innerHTML = htmlContent;
         if (window.lucide) lucide.createIcons();
         if (window.initCharts) window.initCharts(viewName);
-        
+
         document.querySelectorAll('.nav-link').forEach(l => {
             l.classList.remove('active-tab');
             if (l.getAttribute('data-view') === viewName) l.classList.add('active-tab');
@@ -43,10 +43,10 @@ window.renderView = async function(viewName) {
 
 // --- MODALS ---
 
-window.openSaleModal = function() {
+window.openSaleModal = function () {
     const modal = document.getElementById('sale-modal');
     if (!modal) return;
-    
+
     const grid = document.getElementById('product-grid');
     if (grid && window.State && window.State.inventory) {
         const flavorMap = {
@@ -86,15 +86,15 @@ window.selectProduct = (id, el) => {
 window.openStockModal = () => {
     const m = document.getElementById('stock-modal');
     document.getElementById('prod-date').value = new Date().toISOString().split('T')[0];
-    
+
     // Populate flavors from inventory
     const select = document.getElementById('prod-flavor');
     if (select && State.inventory) {
         const flavors = [...new Set(State.inventory.map(i => i.name.split(' (')[0]))];
-        select.innerHTML = '<option value="">Choisir...</option>' + 
+        select.innerHTML = '<option value="">Choisir...</option>' +
             flavors.map(f => `<option value="${f}">${f}</option>`).join('');
     }
-    
+
     m.classList.remove('hidden'); m.classList.add('flex');
 };
 
@@ -145,17 +145,17 @@ window.initCharts = (viewName) => {
                     tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#C8265A'
                 }]
             },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { legend: { display: false } }, 
-                scales: { 
-                    y: { display: false }, 
-                    x: { 
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { display: false },
+                    x: {
                         grid: { display: false },
                         ticks: { color: textColor, font: { family: 'Outfit', weight: 'bold', size: 10 } }
-                    } 
-                } 
+                    }
+                }
             }
         });
     }
@@ -163,34 +163,34 @@ window.initCharts = (viewName) => {
     if (viewName === 'reports') {
         const ctx = document.getElementById('reportsChart');
         if (!ctx) return;
-        
+
         const filter = window.currentReportFilter || 'month';
         const start = window.reportStartDate || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
         const end = window.reportEndDate || new Date().toISOString().split('T')[0];
-        
+
         const stats = State.getFilteredStats(filter, start, end);
-        
+
         window.myReportsChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: ['Revenus', 'Dépenses'],
                 datasets: [{
                     data: [stats.revenue || 0, stats.expense || 0],
-                    backgroundColor: ['#6CA742', '#C8265A'], 
-                    borderWidth: 0, 
+                    backgroundColor: ['#6CA742', '#C8265A'],
+                    borderWidth: 0,
                     cutout: '75%'
                 }]
             },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { 
-                        display: true, 
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
                         position: 'bottom',
                         labels: { color: textColor, font: { family: 'Outfit', weight: 'bold' } }
                     }
-                } 
+                }
             }
         });
     }
@@ -198,12 +198,12 @@ window.initCharts = (viewName) => {
 
 // --- SETTINGS LOGIC ---
 
-window.saveSettings = async function(e) {
+window.saveSettings = async function (e) {
     const btn = e ? e.currentTarget : document.querySelector('button[onclick*="saveSettings"]');
     if (!btn) return;
     const original = btn.innerHTML;
     btn.innerHTML = 'Enregistrement...';
-    
+
     try {
         // Save Prices & Limits
         const prices = document.querySelectorAll('.price-input');
@@ -225,7 +225,7 @@ window.saveSettings = async function(e) {
             localStorage.setItem('terroir-pin', pin);
             await State.updateSettings('pin', pin);
         }
-        
+
         Utils.showToast("Réglages sauvegardés localement et sur le cloud !");
         window.renderView('settings');
     } catch (e) {
@@ -239,20 +239,20 @@ window.saveSettings = async function(e) {
 
 window.toggleBiometrics = async () => {
     const newValue = !State.settings.useBiometrics;
-    
+
     if (newValue) {
         // Only trigger biometric prompt when ENABLING
         try {
             Utils.showToast("Veuillez confirmer votre identité...");
             const challenge = new Uint8Array(32); window.crypto.getRandomValues(challenge);
             await navigator.credentials.create({
-                publicKey: { 
-                    challenge, 
-                    rp: { name: "Jus du Terroir" }, 
-                    user: { id: new Uint8Array(16), name: "alida", displayName: "Alida Edwige" }, 
-                    pubKeyCredParams: [{ alg: -7, type: "public-key" }], 
-                    authenticatorSelection: { userVerification: "required" }, 
-                    timeout: 60000 
+                publicKey: {
+                    challenge,
+                    rp: { name: "Jus du Terroir" },
+                    user: { id: new Uint8Array(16), name: "alida", displayName: "Alida Edwige" },
+                    pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+                    authenticatorSelection: { userVerification: "required" },
+                    timeout: 60000
                 }
             });
             // Success
@@ -268,7 +268,7 @@ window.toggleBiometrics = async () => {
         await State.updateSettings('useBiometrics', false);
         Utils.showToast("Biométrie désactivée");
     }
-    
+
     window.renderView('settings');
 };
 
@@ -320,9 +320,11 @@ window.authenticateBiometric = async () => {
 // --- INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', async () => {
+    const startTime = Date.now();
+
     await State.init();
     window.renderView('dashboard');
-    
+
     if (State.settings.pin && State.settings.pin.length === 4) {
         document.getElementById('lock-screen').classList.remove('hidden');
         if (window.PublicKeyCredential && await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) {
@@ -330,6 +332,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (State.settings.useBiometrics) setTimeout(() => window.authenticateBiometric(), 500);
         }
     }
+
+    // Masquer le splash screen avec un temps d'affichage minimum de 1.5 secondes
+    const elapsedTime = Date.now() - startTime;
+    const remainingTime = Math.max(0, 1500 - elapsedTime);
+
+    setTimeout(() => {
+        const splash = document.getElementById('splash-screen');
+        if (splash) {
+            splash.classList.add('opacity-0');
+            setTimeout(() => splash.remove(), 700); // Attend la fin de la transition opacity (duration-700)
+        }
+    }, remainingTime);
 });
 
 // --- RENDER FUNCTIONS (Templates) ---
@@ -371,17 +385,23 @@ function renderDashboard() {
                 </div>
             </div>
 
-            <div class="bg-terroir-secondary rounded-[2.5rem] p-6 mb-8 text-white shadow-xl flex flex-col gap-4">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-[10px] font-black uppercase text-white/50 mb-1 tracking-widest">Bénéfice Net Global</p>
-                        <h3 class="text-2xl font-black text-terroir-success">${Utils.formatCurrency(stats?.totalProfit || 0)}</h3>
+            <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-[2.5rem] p-6 mb-8 border border-terroir-accent/10 shadow-sm flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm relative">
+                        <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-terroir-accent opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-terroir-accent"></span>
+                        </span>
+                        🔔
                     </div>
-                    <div class="bg-white/10 p-3 rounded-2xl text-center">
-                        <p class="text-[8px] font-black uppercase text-white/40 mb-1">Alertes</p>
-                        <h3 class="text-xs font-black">${stats.lowStockItems || 0} Stock</h3>
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-terroir-accent mb-1 tracking-widest">Alerte Stock Critique</p>
+                        <h3 class="text-xl font-black text-terroir-secondary">${stats.lowStockItems || 0} <span class="text-sm font-bold text-terroir-secondary/60">produits bas</span></h3>
                     </div>
                 </div>
+                <button onclick="window.renderView('inventory')" class="bg-terroir-secondary text-white text-[10px] font-black uppercase px-4 py-3 rounded-xl active:scale-95 transition-all shadow-lg shadow-terroir-secondary/10">
+                    Gérer
+                </button>
             </div>
 
             <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50 mb-8 h-64">
@@ -455,9 +475,9 @@ function renderInventory() {
                         <p class="text-[9px] font-black text-white uppercase tracking-widest">Grands</p>
                     </div>
                     ${(State.inventory || [])
-                        .filter(i => i.name.toLowerCase().includes('grand'))
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map(i => renderStockCard(i)).join('')}
+            .filter(i => i.name.toLowerCase().includes('grand'))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(i => renderStockCard(i)).join('')}
                 </div>
 
                 <!-- COLUMN PETITS -->
@@ -466,9 +486,9 @@ function renderInventory() {
                         <p class="text-[9px] font-black text-white uppercase tracking-widest">Petits</p>
                     </div>
                     ${(State.inventory || [])
-                        .filter(i => i.name.toLowerCase().includes('petit'))
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map(i => renderStockCard(i)).join('')}
+            .filter(i => i.name.toLowerCase().includes('petit'))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(i => renderStockCard(i)).join('')}
                 </div>
             </div>
         </div>`;
@@ -541,9 +561,9 @@ function renderReports() {
     const filter = window.currentReportFilter || 'month';
     const startDateVal = window.reportStartDate || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
     const endDateVal = window.reportEndDate || new Date().toISOString().split('T')[0];
-    
+
     const stats = State.getFilteredStats(filter, startDateVal, endDateVal);
-    
+
     // Breakdown calculations
     const salesBreakdown = (stats.sales || []).reduce((acc, s) => {
         acc[s.items] = (acc[s.items] || 0) + s.total;
@@ -599,10 +619,10 @@ function renderReports() {
                     </button>
                 </div>
                 <div class="flex gap-2 mt-6 overflow-x-auto pb-2">
-                    <button onclick="window.currentReportFilter='today'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='today'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Aujourd'hui</button>
-                    <button onclick="window.currentReportFilter='week'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='week'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Cette Semaine</button>
-                    <button onclick="window.currentReportFilter='month'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='month'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Ce Mois</button>
-                    <button onclick="window.currentReportFilter='all'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter==='all'?'bg-terroir-secondary text-white':'bg-gray-100 text-gray-400'}">Tout le temps</button>
+                    <button onclick="window.currentReportFilter='today'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter === 'today' ? 'bg-terroir-secondary text-white' : 'bg-gray-100 text-gray-400'}">Aujourd'hui</button>
+                    <button onclick="window.currentReportFilter='week'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter === 'week' ? 'bg-terroir-secondary text-white' : 'bg-gray-100 text-gray-400'}">Cette Semaine</button>
+                    <button onclick="window.currentReportFilter='month'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter === 'month' ? 'bg-terroir-secondary text-white' : 'bg-gray-100 text-gray-400'}">Ce Mois</button>
+                    <button onclick="window.currentReportFilter='all'; window.renderView('reports')" class="whitespace-nowrap px-4 py-2 rounded-lg text-[8px] font-black uppercase ${filter === 'all' ? 'bg-terroir-secondary text-white' : 'bg-gray-100 text-gray-400'}">Tout le temps</button>
                 </div>
             </div>
 
@@ -687,27 +707,6 @@ function renderSettings() {
                 </div>
             </div>
 
-            <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50 mb-8">
-                <h3 class="font-black text-lg mb-6 flex items-center gap-3 text-terroir-secondary">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-terroir-primary"><rect width="20" height="12" x="2" y="9" rx="2" ry="2"/><path d="M7 9V5a5 5 0 0 1 10 0v4"/></svg>
-                    Sécurité App
-                </h3>
-                <div class="space-y-4">
-                    <div class="flex flex-col gap-3 p-4 bg-gray-50 rounded-2xl">
-                        <div class="flex items-center justify-between">
-                            <p class="font-bold text-sm">Code PIN</p>
-                            <input type="password" maxlength="4" placeholder="0000" id="set-pin" value="${State.settings.pin || ''}" class="w-20 bg-white border border-gray-100 rounded-xl p-2 text-center font-black tracking-widest outline-none">
-                        </div>
-                        <button onclick="window.saveSettings(event)" class="w-full bg-terroir-primary/10 text-terroir-primary text-[10px] font-black uppercase py-2 rounded-xl border border-terroir-primary/10">Modifier et Sauvegarder</button>
-                    </div>
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                        <p class="font-bold text-sm">Empreinte / FaceID</p>
-                        <button onclick="window.toggleBiometrics()" class="w-12 h-6 rounded-full relative transition-all duration-300 ${State.settings.useBiometrics ? 'bg-terroir-success' : 'bg-gray-200'}">
-                            <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300 ${State.settings.useBiometrics ? 'translate-x-6' : ''}"></div>
-                        </button>
-                    </div>
-                </div>
-            </div>
 
             <div class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50 mb-8">
                 <h3 class="font-black text-lg mb-6 flex items-center gap-3 text-terroir-secondary">
@@ -756,13 +755,13 @@ document.addEventListener('submit', async (e) => {
         const prodId = document.getElementById('sale-product').value;
         const qty = parseInt(document.getElementById('sale-qty').value);
         if (!prodId) return Utils.showToast("Choisissez un produit", "error");
-        
+
         const item = (State.inventory || []).find(i => i.id == prodId);
         if (!item) return Utils.showToast("Produit introuvable", "error");
-        
+
         const total = (item.price || 0) * qty;
         await State.addSale(item.name, total);
-        
+
         document.getElementById('sale-modal').classList.add('hidden');
         Utils.showToast("Vente enregistrée !");
         window.renderView('sales');
@@ -789,7 +788,7 @@ document.addEventListener('submit', async (e) => {
         const pPetit = parseInt(document.getElementById('new-price-petit').value);
         const pGrand = parseInt(document.getElementById('new-price-grand').value);
         const limit = parseInt(document.getElementById('new-limit').value);
-        
+
         await State.addNewProduct(flavor, pPetit, pGrand, limit);
         document.getElementById('product-modal').classList.add('hidden');
         Utils.showToast("Nouveau produit créé !");
