@@ -5,50 +5,66 @@
  */
 const AIAssistant = {
     getInsights: function() {
-        const stats = State.getStats();
+        const todayStats = State.getFilteredStats('today');
+        const weekStats = State.getFilteredStats('week');
         const inventory = State.inventory;
-        const sales = State.recentSales;
-        const expenses = State.expenses;
         
         let insights = [];
 
         // 1. Stock Analysis
-        const criticalItems = inventory.filter(i => i.stock <= 5);
+        const criticalItems = inventory.filter(i => i.stock <= (i.critical_limit || 5));
+        criticalItems.sort((a,b) => a.stock - b.stock);
+
         if (criticalItems.length > 0) {
             insights.push({
                 type: 'warning',
-                message: `Attention Alida, le stock de <strong>${criticalItems[0].name}</strong> est critique (${criticalItems[0].stock} btles). Vous devriez lancer une production demain.`
+                message: `Attention Alida, le stock de <strong>${criticalItems[0].name}</strong> est bas (${criticalItems[0].stock} btles). Vous devriez penser à lancer une production.`
             });
         }
 
-        // 2. Sales Performance
-        if (sales.length > 0) {
-            const bestSeller = this.getBestSeller(sales);
+        // 2. Sales Performance (Weekly)
+        if (weekStats.sales && weekStats.sales.length > 0) {
+            const bestSeller = this.getBestSeller(weekStats.sales);
             insights.push({
                 type: 'success',
-                message: `Votre produit phare cette semaine est le <strong>${bestSeller}</strong>. Assurez-vous d'avoir assez de bouteilles vides en stock !`
+                message: `Votre produit phare cette semaine est <strong>${bestSeller}</strong>. Continuez sur cette belle lancée !`
             });
         }
 
-        // 3. Profitability Insight
-        const margin = stats.totalRevenue > 0 ? (stats.totalProfit / stats.totalRevenue) * 100 : 0;
-        if (margin < 30 && stats.totalRevenue > 0) {
-            insights.push({
-                type: 'danger',
-                message: "Vos marges sont actuellement faibles. Vérifiez si le prix des matières premières (sucre, bouteilles) n'a pas augmenté récemment."
-            });
-        } else if (margin > 50) {
-            insights.push({
-                type: 'success',
-                message: `Excellent ! Votre marge bénéficiaire est de ${Math.round(margin)}%. Votre gestion est très efficace.`
-            });
+        // 3. Profitability Insight (Weekly)
+        const margin = weekStats.revenue > 0 ? (weekStats.profit / weekStats.revenue) * 100 : 0;
+        if (weekStats.revenue > 0) {
+            if (margin < 30) {
+                insights.push({
+                    type: 'danger',
+                    message: "Vos marges de la semaine sont un peu faibles. Vérifiez vos dépenses récentes pour optimiser vos bénéfices."
+                });
+            } else if (margin >= 50) {
+                insights.push({
+                    type: 'success',
+                    message: `Excellente rentabilité cette semaine ! Avec une marge de ${Math.round(margin)}%, votre gestion financière est parfaite.`
+                });
+            }
         }
 
-        // 4. Activity Insight
-        if (stats.totalRevenue === 0) {
+        // 4. Activity Insight (Today)
+        if (todayStats.revenue === 0 && todayStats.expense === 0) {
             insights.push({
                 type: 'info',
                 message: "La journée commence ! N'oubliez pas d'enregistrer chaque vente dès qu'elle est conclue pour un suivi précis."
+            });
+        } else if (todayStats.revenue > 0) {
+            insights.push({
+                type: 'info',
+                message: `Belle journée en cours ! Vous avez déjà réalisé ${Utils.formatCurrency(todayStats.revenue)} de ventes aujourd'hui.`
+            });
+        }
+
+        // Fallback si aucune insight n'est déclenchée
+        if (insights.length === 0) {
+            insights.push({
+                type: 'info',
+                message: "Tout semble en ordre ! Pensez à vérifier vos stocks régulièrement."
             });
         }
 

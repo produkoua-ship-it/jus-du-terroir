@@ -2,13 +2,15 @@
 
 // --- GLOBAL FUNCTIONS ---
 
+window._renderTimeout = null;
 window.renderView = async function (viewName) {
     const container = document.getElementById('view-container');
     if (!container) return;
 
+    if (window._renderTimeout) clearTimeout(window._renderTimeout);
     container.classList.add('fade-out');
 
-    setTimeout(() => {
+    window._renderTimeout = setTimeout(() => {
         let htmlContent = '';
         try {
             switch (viewName) {
@@ -114,10 +116,10 @@ window.toggleActionMenu = () => {
     const icon = document.getElementById('plus-icon');
     if (!overlay.classList.contains('active')) {
         overlay.classList.add('active');
-        if (icon) icon.style.transform = 'rotate(45deg)';
+        if (icon) icon.style.transform = 'rotate(135deg) scale(1.1)';
     } else {
         overlay.classList.remove('active');
-        if (icon) icon.style.transform = 'rotate(0deg)';
+        if (icon) icon.style.transform = 'rotate(0deg) scale(1)';
     }
 };
 
@@ -134,13 +136,34 @@ window.initCharts = (viewName) => {
     if (viewName === 'dashboard') {
         const ctx = document.getElementById('dashboardChart');
         if (!ctx) return;
+
+        const chartData = [0, 0, 0, 0, 0, 0, 0];
+        const chartLabels = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (let i = 6; i >= 0; i--) {
+            let d = new Date(today);
+            d.setDate(d.getDate() - i);
+            chartLabels.push(d.toLocaleDateString('fr-FR', { weekday: 'short' }));
+        }
+
+        (window.State.recentSales || []).forEach(sale => {
+            let d = new Date(sale.date);
+            d.setHours(0, 0, 0, 0);
+            let diffDays = Math.floor((today - d) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays <= 6) {
+                chartData[6 - diffDays] += sale.total || 0;
+            }
+        });
+
         window.myDashboardChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+                labels: chartLabels,
                 datasets: [{
                     label: 'Ventes',
-                    data: [12000, 19000, 15000, 25000, 22000, 30000, 18000],
+                    data: chartData,
                     borderColor: '#C8265A', backgroundColor: 'rgba(200, 38, 90, 0.1)',
                     tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#C8265A'
                 }]
@@ -323,7 +346,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const startTime = Date.now();
 
     await State.init();
-    window.renderView('dashboard');
 
     if (State.settings.pin && State.settings.pin.length === 4) {
         document.getElementById('lock-screen').classList.remove('hidden');
@@ -350,6 +372,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function renderDashboard() {
     const stats = State.getStats();
+    const todayStats = State.getFilteredStats('today');
     return `
         <div class="animate-pop">
             <h2 class="text-2xl font-black mb-1 text-terroir-secondary">Bonjour Alida Edwige 👋</h2>
@@ -360,11 +383,11 @@ function renderDashboard() {
             <div class="grid grid-cols-2 gap-4 mb-4">
                 <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-50">
                     <p class="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-2 text-terroir-success">Ventes Jour</p>
-                    <h3 class="text-xl font-black text-terroir-secondary">${Utils.formatCurrency(stats.totalRevenue)}</h3>
+                    <h3 class="text-xl font-black text-terroir-secondary">${Utils.formatCurrency(todayStats.revenue)}</h3>
                 </div>
                 <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-50">
-                    <p class="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-2 text-terroir-primary">Dépenses</p>
-                    <h3 class="text-xl font-black text-terroir-secondary">${Utils.formatCurrency(stats.totalExpense)}</h3>
+                    <p class="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-2 text-terroir-primary">Dépenses Jour</p>
+                    <h3 class="text-xl font-black text-terroir-secondary">${Utils.formatCurrency(todayStats.expense)}</h3>
                 </div>
             </div>
 
