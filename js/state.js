@@ -5,18 +5,18 @@ const supabaseKey = 'sb_publishable_WfaiELUt2LRkodCmBKhnjA_-DFF4mHE';
 const supabaseClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
 
 const defaultInventory = [
-    { id: '1_P', name: 'Bissap (Petit)', category: 'Fleur', size: 'Petit', price: 500, stock: 45, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '1_G', name: 'Bissap (Grand)', category: 'Fleur', size: 'Grand', price: 1000, stock: 30, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '2_P', name: 'Gingembre (Petit)', category: 'Racine', size: 'Petit', price: 700, stock: 25, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '2_G', name: 'Gingembre (Grand)', category: 'Racine', size: 'Grand', price: 1200, stock: 15, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '3_P', name: 'Citron (Petit)', category: 'Fruit', size: 'Petit', price: 500, stock: 10, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '3_G', name: 'Citron (Grand)', category: 'Fruit', size: 'Grand', price: 1000, stock: 5, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '4_P', name: 'Passion (Petit)', category: 'Fruit', size: 'Petit', price: 700, stock: 12, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '4_G', name: 'Passion (Grand)', category: 'Fruit', size: 'Grand', price: 1300, stock: 8, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '5_P', name: 'Tomi (Petit)', category: 'Fruit', size: 'Petit', price: 600, stock: 20, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '5_G', name: 'Tomi (Grand)', category: 'Fruit', size: 'Grand', price: 1100, stock: 10, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '6_P', name: 'Baobab (Petit)', category: 'Fruit', size: 'Petit', price: 600, stock: 18, critical_limit: 5, last_updated: new Date().toISOString() },
-    { id: '6_G', name: 'Baobab (Grand)', category: 'Fruit', size: 'Grand', price: 1100, stock: 12, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '1_P', name: 'Bissap (Petit)', category: 'Fleur', size: 'Petit', price: 500, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '1_G', name: 'Bissap (Grand)', category: 'Fleur', size: 'Grand', price: 1000, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '2_P', name: 'Gingembre (Petit)', category: 'Racine', size: 'Petit', price: 700, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '2_G', name: 'Gingembre (Grand)', category: 'Racine', size: 'Grand', price: 1200, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '3_P', name: 'Citron (Petit)', category: 'Fruit', size: 'Petit', price: 500, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '3_G', name: 'Citron (Grand)', category: 'Fruit', size: 'Grand', price: 1000, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '4_P', name: 'Passion (Petit)', category: 'Fruit', size: 'Petit', price: 700, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '4_G', name: 'Passion (Grand)', category: 'Fruit', size: 'Grand', price: 1300, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '5_P', name: 'Tomi (Petit)', category: 'Fruit', size: 'Petit', price: 600, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '5_G', name: 'Tomi (Grand)', category: 'Fruit', size: 'Grand', price: 1100, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '6_P', name: 'Baobab (Petit)', category: 'Fruit', size: 'Petit', price: 600, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
+    { id: '6_G', name: 'Baobab (Grand)', category: 'Fruit', size: 'Grand', price: 1100, stock: 0, critical_limit: 5, last_updated: new Date().toISOString() },
 ];
 
 const State = {
@@ -626,6 +626,43 @@ const State = {
         if (window.renderView) {
             const activeView = document.querySelector('.nav-link.active-tab')?.getAttribute('data-view') || 'dashboard';
             window.renderView(activeView);
+        }
+    },
+
+    factoryReset: async function() {
+        if (!confirm("ATTENTION : Voulez-vous vraiment effacer toutes les données ? (Stocks, Ventes, Dépenses) Cette action est irréversible et remettra l'application à zéro.")) {
+            return;
+        }
+        
+        try {
+            // Delete data from Supabase if online
+            if (this.isOnline && supabaseClient) {
+                Utils.showToast("Suppression des données cloud...", "info");
+                
+                // We don't have TRUNCATE in client side supabase, so we delete where id.neq = 0 (all rows)
+                await supabaseClient.from('sales').delete().neq('id', '0');
+                await supabaseClient.from('productions').delete().neq('id', '0');
+                await supabaseClient.from('expenses').delete().neq('id', '0');
+                
+                // For inventory, we can update them to 0 or delete them. It's safer to delete and let it recreate defaults, 
+                // but default is fine. Let's delete them.
+                await supabaseClient.from('inventory').delete().neq('id', '0');
+            }
+            
+            // Clear LocalStorage completely
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('terroir-')) {
+                    localStorage.removeItem(key);
+                }
+            });
+            
+            Utils.showToast("Données réinitialisées avec succès !", "success");
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } catch (e) {
+            console.error("Erreur lors de la réinitialisation", e);
+            Utils.showToast("Erreur lors de la suppression des données cloud", "error");
         }
     }
 };

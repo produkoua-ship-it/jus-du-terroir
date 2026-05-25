@@ -757,6 +757,15 @@ function renderSettings() {
 
             <button onclick="window.saveSettings(event)" class="w-full bg-terroir-secondary text-white font-black py-5 rounded-[1.5rem] shadow-xl active:scale-95 transition-all">Sauvegarder les réglages</button>
             <button onclick="window.exportToCSV()" class="w-full mt-4 bg-white border border-gray-100 text-terroir-secondary font-black py-5 rounded-[1.5rem] active:scale-95 transition-all">Exporter CSV</button>
+            
+            <div class="mt-12 p-6 border border-red-100 bg-red-50/50 rounded-[2rem]">
+                <h3 class="font-black text-red-600 mb-2 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Zone Danger
+                </h3>
+                <p class="text-xs text-red-500 font-medium mb-4">Cette action effacera toutes les ventes, productions, dépenses et remettra le stock à zéro.</p>
+                <button onclick="State.factoryReset()" class="w-full bg-red-600 text-white font-black py-4 rounded-xl shadow-lg shadow-red-600/20 active:scale-95 transition-all">Remise à zéro totale</button>
+            </div>
         </div>`;
 }
 
