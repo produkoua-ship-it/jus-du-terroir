@@ -1,8 +1,9 @@
-const CACHE_NAME = 'terroir-v5';
+const CACHE_NAME = 'terroir-v6';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
+  './css/tailwind.css',
   './js/main.js',
   './js/state.js',
   './js/utils.js',
@@ -15,7 +16,6 @@ const ASSETS = [
 
 // Liste des motifs CDN à mettre en cache (cache-first après la 1ère visite)
 const CDN_URLS = [
-  'cdn.tailwindcss.com',
   'fonts.googleapis.com',
   'fonts.gstatic.com',
   'cdn.jsdelivr.net/npm/@supabase/supabase-js',

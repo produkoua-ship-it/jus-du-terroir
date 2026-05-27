@@ -15,42 +15,8 @@
     <link rel="icon" type="image/png" href="img/icon-192.png?v=1.0.3">
     <link rel="apple-touch-icon" href="img/icon-192.png?v=1.0.3">
 
-    <!-- Tailwind CSS avec fallback inline -->
-    <script>
-        // Définir la config Tailwind avant le chargement CDN
-        tailwind = undefined;
-    </script>
-    <script src="https://cdn.tailwindcss.com"
-        onerror="console.warn('Tailwind CDN failed, using fallback styles')"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet"
-        onerror="this.remove(); console.warn('Google Fonts failed, using system fonts');">
-    <style>
-        /* Fallback si Tailwind n'est pas chargé */
-        .tailwind-fallback {
-            font-family: 'Outfit', system-ui, sans-serif;
-        }
-    </style>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'terroir-primary': '#C8265A', // Hibiscus Red
-                        'terroir-secondary': '#240F2E', // Deep Purple
-                        'terroir-accent': '#F39C12', // Ginger Gold
-                        'terroir-success': '#6CA742', // Nature Green
-                        'terroir-bg': '#F8F9FE',
-                    },
-                    borderRadius: {
-                        '3xl': '2rem',
-                    },
-                    fontFamily: {
-                        sans: ['Outfit', 'sans-serif'],
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Local Tailwind CSS -->
+    <link rel="stylesheet" href="css/tailwind.css">
     <style>
         .custom-shadow {
             box-shadow: 0 20px 50px rgba(36, 15, 46, 0.08);

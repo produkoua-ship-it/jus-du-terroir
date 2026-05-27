@@ -1,0 +1,17 @@
+{
+  "name": "jus-du-terroir",
+  "version": "1.0.0",
+  "description": "",
+  "main": "sw.js",
+  "scripts": {
+    "build:css": "npx tailwindcss@3 -i ./input.css -o ./css/tailwind.css --minify",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "tailwindcss": "^4.3.0"
+  }
+}
